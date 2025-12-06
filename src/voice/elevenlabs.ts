@@ -3,7 +3,7 @@ import { Readable } from "stream";
 
 export interface VoiceConfig {
   apiKey: string;
-  voiceId?: string; // Default: "21m00Tcm4TlvDq8ikWAM" (Rachel)
+  voiceId?: string; // Default: "pNInz6obpgDQGcFmaJgB" (Adam)
 }
 
 export class VoiceService {
@@ -12,7 +12,7 @@ export class VoiceService {
 
   constructor(config: VoiceConfig) {
     this.client = new ElevenLabsClient({ apiKey: config.apiKey });
-    this.voiceId = config.voiceId || "21m00Tcm4TlvDq8ikWAM"; // Rachel - friendly female voice
+    this.voiceId = config.voiceId || "pNInz6obpgDQGcFmaJgB"; // Adam - deep, middle-aged American male voice
   }
 
   async textToSpeech(text: string): Promise<Buffer> {

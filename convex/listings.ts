@@ -14,9 +14,11 @@ export const addMany = mutation({
         bedrooms: v.optional(v.number()),
         url: v.string(),
         imageUrl: v.optional(v.string()),
+        imageUrls: v.optional(v.array(v.string())),
         description: v.optional(v.string()),
         contactPhone: v.optional(v.string()),
         contactEmail: v.optional(v.string()),
+        contactMethod: v.optional(v.string()),
       })
     ),
   },

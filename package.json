@@ -4,7 +4,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx src/index.ts",
     "start": "tsx src/index.ts",
     "build": "tsc",
     "convex": "convex dev",
@@ -26,6 +26,7 @@
     "@smithery/sdk": "^2.1.0",
     "@types/node": "^24.10.1",
     "convex": "^1.30.0",
+    "docusign-esign": "^8.5.0",
     "dotenv": "^17.2.3",
     "exa-js": "^2.0.11",
     "grammy": "^1.38.4",

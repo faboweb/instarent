@@ -50,6 +50,8 @@ export const updateRequirements = mutation({
   args: {
     conversationId: v.id("conversations"),
     requirements: v.object({
+      customerName: v.optional(v.string()),
+      customerOrigin: v.optional(v.string()),
       location: v.optional(v.string()),
       bedrooms: v.optional(v.number()),
       maxBudget: v.optional(v.number()),
@@ -75,5 +77,16 @@ export const get = query({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.conversationId);
+  },
+});
+
+export const getAllActive = query({
+  args: {},
+  handler: async (ctx) => {
+    // Get all conversations that are not completed
+    return await ctx.db
+      .query("conversations")
+      .filter((q) => q.neq(q.field("status"), "completed"))
+      .collect();
   },
 });

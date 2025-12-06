@@ -19,6 +19,14 @@ Fill in your API keys in `.env`:
 - `OPENAI_API_KEY` - Get from [OpenAI Platform](https://platform.openai.com/api-keys)
 - `CONVEX_URL` - Auto-generated in step 3
 
+**For Facebook Scraping (optional):**
+- `SMITHERY_BROWSERBASE_URL` - Get from [Smithery Dashboard](https://smithery.ai/server/@browserbasehq/mcp-browserbase) (configure your Browserbase credentials there)
+- `FB_EMAIL` - Facebook login email
+- `FB_PASSWORD` - Facebook login password
+
+**For Calendly Scheduling (optional):**
+- `SMITHERY_CALENDLY_URL` - Get from [Smithery Dashboard](https://smithery.ai/server/@zapier/mcp-calendly) (configure your Calendly access token there)
+
 ### 3. Set Up Convex
 ```bash
 npx convex dev
@@ -64,6 +72,9 @@ instarent/
 │   │   └── telegram.ts  # Telegram bot handler
 │   ├── ai/
 │   │   └── conversation.ts # OpenAI conversation logic
+│   ├── scraping/
+│   │   ├── browserbase.ts  # Browserbase MCP client wrapper
+│   │   └── facebook.ts     # Facebook Marketplace & group scraper
 │   └── index.ts         # Entry point
 ├── .env.example         # Environment template
 └── package.json
@@ -78,3 +89,4 @@ instarent/
 - [x] **M5**: Appointments - Calendly integration
 - [x] **M6**: Contracts - DocuSign integration
 - [x] **M7**: Payments - Stripe invoicing
+- [x] **M8**: Facebook Scraping - Browserbase-powered Marketplace & group scraping

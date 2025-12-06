@@ -1,18 +1,14 @@
-// DocuSign API integration for rental contract signing
-// Note: DocuSign requires OAuth - this is a simplified implementation
+// @ts-ignore - docusign-esign has type issues
+import docusign from "docusign-esign";
+import fs from "fs";
 
 export interface DocuSignConfig {
   integrationKey: string;
   userId: string;
   accountId: string;
   basePath: string;
-  privateKey: string;
-}
-
-export interface ContractRecipient {
-  email: string;
-  name: string;
-  role: "tenant" | "landlord";
+  privateKeyPath: string;
+  returnUrl?: string;
 }
 
 export interface ContractDetails {
@@ -28,79 +24,120 @@ export interface ContractDetails {
   landlordEmail: string;
 }
 
-export interface EnvelopeResult {
+export interface SigningUrlResult {
   envelopeId: string;
-  status: string;
-  signingUrl?: string;
+  signingUrl: string;
 }
 
 export class DocuSignService {
   private config: DocuSignConfig;
-  private accessToken?: string;
+  private apiClient: docusign.ApiClient;
+  private accessToken: string | undefined;
+  private tokenExpiresAt: number | undefined;
 
   constructor(config: DocuSignConfig) {
     this.config = config;
+    this.apiClient = new docusign.ApiClient();
+    this.apiClient.setBasePath(config.basePath);
   }
 
-  // In production, implement JWT authentication
   private async getAccessToken(): Promise<string> {
-    if (this.accessToken) {
+    // Check if we have a valid token
+    if (this.accessToken && this.tokenExpiresAt && Date.now() < this.tokenExpiresAt) {
       return this.accessToken;
     }
 
-    // For demo purposes, we'll use a placeholder
-    // In production, implement JWT grant flow:
-    // https://developers.docusign.com/platform/auth/jwt/jwt-get-token/
-    console.warn("DocuSign: Using demo mode - implement JWT auth for production");
+    console.log("🔐 Requesting DocuSign access token via JWT...");
 
-    // This would be the actual JWT authentication
-    // const jwt = require('jsonwebtoken');
-    // const token = jwt.sign({ ... }, this.config.privateKey, { algorithm: 'RS256' });
-    // Exchange for access token...
+    // Read private key from file
+    const privateKeyBuffer = fs.readFileSync(this.config.privateKeyPath);
 
-    this.accessToken = "demo_token";
-    return this.accessToken;
+    // Request JWT token
+    const results = await this.apiClient.requestJWTUserToken(
+      this.config.integrationKey,
+      this.config.userId,
+      ["signature", "impersonation"],
+      privateKeyBuffer,
+      3600 // Token expires in 1 hour
+    );
+
+    this.accessToken = results.body.access_token!;
+    this.tokenExpiresAt = Date.now() + (results.body.expires_in! * 1000) - 60000; // Refresh 1 min before expiry
+
+    console.log("✅ DocuSign access token obtained");
+    return this.accessToken!;
   }
 
-  async createRentalContract(details: ContractDetails): Promise<EnvelopeResult> {
+  async createContractAndGetSigningUrl(
+    details: ContractDetails,
+    clientUserId: string
+  ): Promise<SigningUrlResult> {
     console.log(`📝 Creating rental contract for ${details.propertyAddress}`);
 
-    // For demo: Generate a simple contract document
+    const accessToken = await this.getAccessToken();
+    this.apiClient.addDefaultHeader("Authorization", `Bearer ${accessToken}`);
+
+    // Generate contract HTML
     const contractHtml = this.generateContractHtml(details);
+    const contractBase64 = Buffer.from(contractHtml).toString("base64");
 
-    // In production, use DocuSign eSignature API:
-    // POST /restapi/v2.1/accounts/{accountId}/envelopes
+    // Create envelope definition
+    const envelopeDefinition = new docusign.EnvelopeDefinition();
+    envelopeDefinition.emailSubject = `Rental Agreement - ${details.propertyAddress}`;
+    envelopeDefinition.status = "sent";
 
-    // Demo response
-    const envelopeId = `ENV-${Date.now()}`;
+    // Add document
+    const document = new docusign.Document();
+    document.documentBase64 = contractBase64;
+    document.name = "Rental Agreement";
+    document.fileExtension = "html";
+    document.documentId = "1";
+    envelopeDefinition.documents = [document];
 
-    console.log(`✅ Contract created: ${envelopeId}`);
+    // Add tenant as signer with clientUserId for embedded signing
+    const signer = new docusign.Signer();
+    signer.email = details.tenantEmail;
+    signer.name = details.tenantName;
+    signer.recipientId = "1";
+    signer.clientUserId = clientUserId; // This enables embedded signing
+
+    // Add signature tab
+    const signHere = new docusign.SignHere();
+    signHere.documentId = "1";
+    signHere.pageNumber = "1";
+    signHere.recipientId = "1";
+    signHere.tabLabel = "TenantSignature";
+    signHere.xPosition = "100";
+    signHere.yPosition = "500";
+
+    const tabs = new docusign.Tabs();
+    tabs.signHereTabs = [signHere];
+    signer.tabs = tabs;
+
+    envelopeDefinition.recipients = new docusign.Recipients();
+    envelopeDefinition.recipients.signers = [signer];
+
+    // Create envelope
+    const envelopesApi = new docusign.EnvelopesApi(this.apiClient);
+    const envelopeResult = await envelopesApi.createEnvelope(
+      this.config.accountId,
+      { envelopeDefinition }
+    );
+
+    const envelopeId = envelopeResult.envelopeId!;
+    console.log(`✅ Envelope created: ${envelopeId}`);
+
+    // Generate signing URL
+    const signingUrl = await this.getSigningUrl(
+      envelopeId,
+      details.tenantEmail,
+      details.tenantName,
+      clientUserId
+    );
 
     return {
       envelopeId,
-      status: "created",
-      signingUrl: `https://demo.docusign.net/Signing/StartInSession.aspx?t=${envelopeId}`,
-    };
-  }
-
-  async sendForSignature(envelopeId: string): Promise<EnvelopeResult> {
-    console.log(`📤 Sending envelope ${envelopeId} for signature`);
-
-    // In production: PUT /restapi/v2.1/accounts/{accountId}/envelopes/{envelopeId}
-    // with status: "sent"
-
-    return {
-      envelopeId,
-      status: "sent",
-    };
-  }
-
-  async getEnvelopeStatus(envelopeId: string): Promise<EnvelopeResult> {
-    // In production: GET /restapi/v2.1/accounts/{accountId}/envelopes/{envelopeId}
-
-    return {
-      envelopeId,
-      status: "sent", // or "completed", "declined", etc.
+      signingUrl,
     };
   }
 
@@ -108,43 +145,140 @@ export class DocuSignService {
     envelopeId: string,
     recipientEmail: string,
     recipientName: string,
-    returnUrl: string
+    clientUserId: string
   ): Promise<string> {
-    // In production: POST /restapi/v2.1/accounts/{accountId}/envelopes/{envelopeId}/views/recipient
+    console.log(`🔗 Generating signing URL for envelope ${envelopeId}`);
 
-    return `https://demo.docusign.net/Signing/StartInSession.aspx?t=${envelopeId}&returnUrl=${encodeURIComponent(returnUrl)}`;
+    const accessToken = await this.getAccessToken();
+    this.apiClient.addDefaultHeader("Authorization", `Bearer ${accessToken}`);
+
+    const envelopesApi = new docusign.EnvelopesApi(this.apiClient);
+
+    const viewRequest = new docusign.RecipientViewRequest();
+    viewRequest.returnUrl = this.config.returnUrl || "https://www.docusign.com/deferred-link";
+    viewRequest.authenticationMethod = "none";
+    viewRequest.email = recipientEmail;
+    viewRequest.userName = recipientName;
+    viewRequest.clientUserId = clientUserId;
+
+    const viewResult = await envelopesApi.createRecipientView(
+      this.config.accountId,
+      envelopeId,
+      { recipientViewRequest: viewRequest }
+    );
+
+    console.log(`✅ Signing URL generated`);
+    return viewResult.url!;
+  }
+
+  async getEnvelopeStatus(envelopeId: string): Promise<string> {
+    const accessToken = await this.getAccessToken();
+    this.apiClient.addDefaultHeader("Authorization", `Bearer ${accessToken}`);
+
+    const envelopesApi = new docusign.EnvelopesApi(this.apiClient);
+    const envelope = await envelopesApi.getEnvelope(this.config.accountId, envelopeId);
+
+    return envelope.status!;
   }
 
   private generateContractHtml(details: ContractDetails): string {
+    const today = new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
     return `
-      <!DOCTYPE html>
-      <html>
-      <head><title>Rental Agreement</title></head>
-      <body>
-        <h1>RESIDENTIAL LEASE AGREEMENT</h1>
-        
-        <p>This Rental Agreement is entered into on ${new Date().toLocaleDateString()}</p>
-        
-        <h2>PARTIES</h2>
-        <p><strong>Landlord:</strong> ${details.landlordName} (${details.landlordEmail})</p>
-        <p><strong>Tenant:</strong> ${details.tenantName} (${details.tenantEmail})</p>
-        
-        <h2>PROPERTY</h2>
-        <p>${details.propertyAddress}</p>
-        
-        <h2>TERM</h2>
-        <p>Start Date: ${details.startDate}</p>
-        <p>End Date: ${details.endDate}</p>
-        
-        <h2>RENT</h2>
-        <p>Monthly Rent: ${details.currency} ${details.monthlyRent}</p>
-        <p>Security Deposit: ${details.currency} ${details.depositAmount}</p>
-        
-        <h2>SIGNATURES</h2>
-        <p>Landlord Signature: _____________________ Date: _____</p>
-        <p>Tenant Signature: _____________________ Date: _____</p>
-      </body>
-      </html>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Rental Agreement</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+    h1 { text-align: center; color: #333; border-bottom: 2px solid #333; padding-bottom: 10px; }
+    h2 { color: #555; margin-top: 30px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+    .section { margin: 20px 0; }
+    .party { margin: 10px 0; }
+    .signature { margin-top: 60px; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    td { padding: 8px; border: 1px solid #ddd; }
+    .label { font-weight: bold; width: 40%; background-color: #f5f5f5; }
+  </style>
+</head>
+<body>
+  <h1>RESIDENTIAL LEASE AGREEMENT</h1>
+  
+  <div class="section">
+    <p><strong>This Rental Agreement is entered into on ${today}</strong></p>
+  </div>
+
+  <h2>PARTIES</h2>
+  <div class="section">
+    <div class="party">
+      <strong>LANDLORD:</strong><br>
+      Name: ${details.landlordName}<br>
+      Email: ${details.landlordEmail}
+    </div>
+    <div class="party">
+      <strong>TENANT:</strong><br>
+      Name: ${details.tenantName}<br>
+      Email: ${details.tenantEmail}
+    </div>
+  </div>
+
+  <h2>PROPERTY</h2>
+  <div class="section">
+    <p><strong>Rental Property Address:</strong><br>${details.propertyAddress}</p>
+  </div>
+
+  <h2>LEASE TERM</h2>
+  <div class="section">
+    <table>
+      <tr>
+        <td class="label">Lease Start Date</td>
+        <td>${details.startDate}</td>
+      </tr>
+      <tr>
+        <td class="label">Lease End Date</td>
+        <td>${details.endDate}</td>
+      </tr>
+    </table>
+  </div>
+
+  <h2>RENT AND PAYMENT</h2>
+  <div class="section">
+    <table>
+      <tr>
+        <td class="label">Monthly Rent</td>
+        <td>${details.currency} ${details.monthlyRent.toLocaleString()}</td>
+      </tr>
+      <tr>
+        <td class="label">Security Deposit</td>
+        <td>${details.currency} ${details.depositAmount.toLocaleString()}</td>
+      </tr>
+      <tr>
+        <td class="label">Rent Due Date</td>
+        <td>First day of each month</td>
+      </tr>
+    </table>
+  </div>
+
+  <h2>TERMS AND CONDITIONS</h2>
+  <div class="section">
+    <p>1. The tenant agrees to pay rent on time and maintain the property in good condition.</p>
+    <p>2. The landlord agrees to maintain the property in habitable condition and make necessary repairs.</p>
+    <p>3. This lease may be terminated by either party with 30 days written notice.</p>
+    <p>4. The security deposit will be returned within 30 days of lease termination, minus any deductions for damages.</p>
+  </div>
+
+  <h2>SIGNATURES</h2>
+  <div class="signature">
+    <p><strong>TENANT SIGNATURE:</strong></p>
+    <p>(Please sign below)</p>
+  </div>
+</body>
+</html>
     `;
   }
 }

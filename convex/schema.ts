@@ -15,11 +15,21 @@ export default defineSchema({
     status: v.string(), // "gathering_requirements", "searching", "selecting", "contacting", "scheduling", "contracting", "payment", "completed"
     requirements: v.optional(
       v.object({
+        customerName: v.optional(v.string()),
+        customerOrigin: v.optional(v.string()),
         location: v.optional(v.string()),
         bedrooms: v.optional(v.number()),
         maxBudget: v.optional(v.number()),
         moveInDate: v.optional(v.string()),
         extras: v.optional(v.string()),
+        passportData: v.optional(v.object({
+          fullName: v.string(),
+          passportNumber: v.string(),
+          dateOfBirth: v.optional(v.string()),
+          nationality: v.optional(v.string()),
+          expiryDate: v.optional(v.string()),
+          gender: v.optional(v.string()),
+        })),
       })
     ),
   }).index("by_user", ["userId"]),
@@ -40,10 +50,12 @@ export default defineSchema({
     location: v.string(),
     bedrooms: v.optional(v.number()),
     url: v.string(),
-    imageUrl: v.optional(v.string()),
+    imageUrl: v.optional(v.string()), // Primary image (first image for backward compatibility)
+    imageUrls: v.optional(v.array(v.string())), // All image URLs
     description: v.optional(v.string()),
     contactPhone: v.optional(v.string()),
     contactEmail: v.optional(v.string()),
+    contactMethod: v.optional(v.string()), // "form", "email", "phone", "line"
     selected: v.optional(v.boolean()),
   }).index("by_conversation", ["conversationId"]),
 
@@ -51,12 +63,14 @@ export default defineSchema({
   calls: defineTable({
     listingId: v.id("listings"),
     conversationId: v.id("conversations"),
-    status: v.string(), // "pending", "in_progress", "completed", "failed"
+    status: v.string(), // "pending", "in_progress", "completed", "failed", "missed", "call_back", "done"
     twilioCallSid: v.optional(v.string()),
     transcript: v.optional(v.string()),
     outcome: v.optional(v.string()),
     scheduledTime: v.optional(v.string()),
-  }).index("by_listing", ["listingId"]),
+    retryAttempt: v.optional(v.number()), // Track retry attempts (0 = first attempt)
+    nextRetryTime: v.optional(v.string()), // ISO timestamp for next retry
+  }).index("by_listing", ["listingId"]).index("by_conversation", ["conversationId"]),
 
   // For Milestone 5+
   appointments: defineTable({
