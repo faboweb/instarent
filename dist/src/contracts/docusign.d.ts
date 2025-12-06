@@ -3,7 +3,8 @@ export interface DocuSignConfig {
     userId: string;
     accountId: string;
     basePath: string;
-    privateKeyPath: string;
+    privateKey?: string;
+    privateKeyPath?: string;
     returnUrl?: string;
 }
 export interface ContractDetails {

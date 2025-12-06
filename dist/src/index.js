@@ -217,14 +217,15 @@ async function main() {
         process.env.DOCUSIGN_USER_ID &&
         process.env.DOCUSIGN_ACCOUNT_ID &&
         process.env.DOCUSIGN_BASE_PATH &&
-        process.env.DOCUSIGN_PRIVATE_KEY_PATH) {
+        (process.env.DOCUSIGN_PRIVATE_KEY || process.env.DOCUSIGN_PRIVATE_KEY_PATH)) {
         try {
             docusignService = createDocuSignService({
                 integrationKey: process.env.DOCUSIGN_INTEGRATION_KEY,
                 userId: process.env.DOCUSIGN_USER_ID,
                 accountId: process.env.DOCUSIGN_ACCOUNT_ID,
                 basePath: process.env.DOCUSIGN_BASE_PATH,
-                privateKeyPath: process.env.DOCUSIGN_PRIVATE_KEY_PATH,
+                privateKey: process.env.DOCUSIGN_PRIVATE_KEY, // Direct key content
+                privateKeyPath: process.env.DOCUSIGN_PRIVATE_KEY_PATH, // Or file path
                 returnUrl: process.env.DOCUSIGN_RETURN_URL,
             });
             console.log("✅ DocuSign contract signing enabled");
@@ -244,7 +245,7 @@ async function main() {
         console.warn("⚠️ DocuSign credentials not set. Contract signing disabled.");
     }
     // Create and start bot
-    const bot = createBot(process.env.TELEGRAM_BOT_TOKEN, convex, openai, exa, voiceService, callService, websiteScraper, browserbaseClient, docusignService);
+    const bot = createBot(process.env.TELEGRAM_BOT_TOKEN, convex, openai, exa, voiceService, callService, websiteScraper, browserbaseClient, docusignService, paymentService);
     console.log("🚀 InstaRent bot starting...");
     // Run scraper on startup (background task) - DISABLED
     // if (websiteScraper) {
@@ -476,7 +477,7 @@ async function handleContactingState(convex, conversationId, bot, callService, c
                 const customerName = requirements.customerName || user.firstName || "a client";
                 const customerOrigin = requirements.customerOrigin;
                 const moveInDate = requirements.moveInDate;
-                const script = callService.generatePropertyInquiryScript("Mike Lee", customerName, customerOrigin, selectedListing.title, selectedListing.location, moveInDate);
+                const script = callService.generatePropertyInquiryScript("Mike Lee", customerName, selectedListing.title, selectedListing.location);
                 const callResult = await callService.makeCall(selectedListing.contactPhone, script);
                 await convex.mutation(api.calls.updateStatus, {
                     callId: latestCall._id,
@@ -813,7 +814,7 @@ async function handleContactingState(convex, conversationId, bot, callService, c
                     const customerOrigin = requirements.customerOrigin;
                     const moveInDate = requirements.moveInDate;
                     try {
-                        const script = callService.generatePropertyInquiryScript("Mike Lee", customerName, customerOrigin, selectedListing.title, selectedListing.location, moveInDate);
+                        const script = callService.generatePropertyInquiryScript("Mike Lee", customerName, selectedListing.title, selectedListing.location);
                         const callId = await convex.mutation(api.calls.create, {
                             listingId: selectedListing._id,
                             conversationId: conversationId,
@@ -971,7 +972,7 @@ async function handleContactingState(convex, conversationId, bot, callService, c
                     const customerOrigin = requirements.customerOrigin;
                     const moveInDate = requirements.moveInDate;
                     try {
-                        const script = callService.generatePropertyInquiryScript("Mike Lee", customerName, customerOrigin, selectedListing.title, selectedListing.location, moveInDate);
+                        const script = callService.generatePropertyInquiryScript("Mike Lee", customerName, selectedListing.title, selectedListing.location);
                         const callId = await convex.mutation(api.calls.create, {
                             listingId: selectedListing._id,
                             conversationId: conversationId,
@@ -1503,8 +1504,8 @@ async function handlePaymentState(convex, conversationId, bot, paymentService) {
                         stripeInvoiceId: invoice.invoiceId,
                         paymentUrl: invoice.hostedInvoiceUrl,
                     });
-                    // Send invoice to customer
-                    await paymentService.sendInvoice(invoice.invoiceId);
+                    // Don't send invoice via email - just give user the link directly
+                    console.log(`  ✅ Payment invoice created: ${invoice.invoiceId}`);
                     // Notify user
                     const totalAmount = (monthlyRent + deposit).toFixed(2);
                     const message = `💳 Time to secure your new home!\n\n` +

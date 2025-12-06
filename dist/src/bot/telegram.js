@@ -2,7 +2,7 @@ import { Bot, InlineKeyboard, InputFile } from "grammy";
 import { api } from "../../convex/_generated/api";
 import { chat } from "../ai/conversation";
 import { searchListings, formatListingMessage } from "../search/exa";
-export function createBot(token, convex, openai, exa, voiceService, callService, websiteScraper, browserbaseClient, docusignService) {
+export function createBot(token, convex, openai, exa, voiceService, callService, websiteScraper, browserbaseClient, docusignService, paymentService) {
     const bot = new Bot(token);
     bot.command("start", async (ctx) => {
         const user = ctx.from;
@@ -148,7 +148,83 @@ export function createBot(token, convex, openai, exa, voiceService, callService,
                 status: "payment",
             });
             await ctx.editMessageReplyMarkup({ reply_markup: undefined });
-            await ctx.reply("✅ Contract confirmed! Now let's handle the payment...");
+            // Get listing for payment details
+            const selectedListing = await convex.query(api.listings.getSelected, {
+                conversationId: conversation._id,
+            });
+            if (selectedListing) {
+                const monthlyRent = selectedListing.price;
+                const deposit = selectedListing.price; // 1 month deposit
+                const currency = selectedListing.currency;
+                const totalAmount = (monthlyRent + deposit).toFixed(2);
+                await ctx.reply(`✅ Contract confirmed!\n\n` +
+                    `💳 Time to secure your new home!\n\n` +
+                    `Creating your payment invoice...`);
+                // Create Stripe invoice immediately
+                if (paymentService) {
+                    try {
+                        const requirements = conversation.requirements || {};
+                        const passportData = requirements.passportData;
+                        const tenantName = passportData?.fullName || user.first_name || "Tenant";
+                        const tenantEmail = user.username ? `${user.username}@telegram.user` : "tenant@example.com";
+                        // Create invoice
+                        const invoice = await paymentService.createRentalPaymentInvoice(tenantEmail, tenantName, selectedListing.title, monthlyRent, deposit, currency);
+                        // Save payment record
+                        const paymentId = await convex.mutation(api.payments.create, {
+                            conversationId: conversation._id,
+                            contractId: contracts[contracts.length - 1]?._id,
+                            amount: invoice.amountDue,
+                            currency: invoice.currency,
+                            stripeInvoiceId: invoice.invoiceId,
+                            paymentUrl: invoice.hostedInvoiceUrl,
+                        });
+                        // Don't send invoice via email - just give user the link directly
+                        console.log(`✅ Payment invoice created: ${invoice.invoiceId}`);
+                        // Send payment link to user
+                        const message = `💳 Payment Invoice Created!\n\n` +
+                            `Payment required:\n` +
+                            `• First month rent: ${currency} ${monthlyRent}\n` +
+                            `• Security deposit: ${currency} ${deposit}\n` +
+                            `• Total: ${currency} ${totalAmount}\n\n` +
+                            `Click here to pay securely:\n${invoice.hostedInvoiceUrl}\n\n` +
+                            `Once payment is complete, click the button below.`;
+                        const keyboard = new InlineKeyboard().text("✅ I've completed the payment", "confirm_payment");
+                        await ctx.reply(message, {
+                            reply_markup: keyboard,
+                        });
+                    }
+                    catch (stripeError) {
+                        console.error("❌ Error creating Stripe invoice:", stripeError);
+                        // Fallback message
+                        const message = `💳 Payment Required\n\n` +
+                            `• First month rent: ${currency} ${monthlyRent}\n` +
+                            `• Security deposit: ${currency} ${deposit}\n` +
+                            `• Total: ${currency} ${totalAmount}\n\n` +
+                            `Payment processing is not available. Please arrange payment with the landlord directly.\n\n` +
+                            `Once payment is complete, click the button below.`;
+                        const keyboard = new InlineKeyboard().text("✅ I've completed the payment", "confirm_payment");
+                        await ctx.reply(message, {
+                            reply_markup: keyboard,
+                        });
+                    }
+                }
+                else {
+                    // No payment service
+                    const message = `💳 Payment Required\n\n` +
+                        `• First month rent: ${currency} ${monthlyRent}\n` +
+                        `• Security deposit: ${currency} ${deposit}\n` +
+                        `• Total: ${currency} ${totalAmount}\n\n` +
+                        `Please arrange payment with the landlord directly.\n\n` +
+                        `Once payment is complete, click the button below.`;
+                    const keyboard = new InlineKeyboard().text("✅ I've completed the payment", "confirm_payment");
+                    await ctx.reply(message, {
+                        reply_markup: keyboard,
+                    });
+                }
+            }
+            else {
+                await ctx.reply("✅ Contract confirmed! Now let's handle the payment...");
+            }
         }
         catch (error) {
             console.error("Error confirming contract:", error);
@@ -505,7 +581,7 @@ Be precise and only return information you can clearly read.`
                 // Make a phone call
                 if (callService && selectedListing.contactPhone) {
                     try {
-                        const script = callService.generatePropertyInquiryScript("Mike Lee", customerName, customerOrigin, selectedListing.title, selectedListing.location, moveInDate);
+                        const script = callService.generatePropertyInquiryScript("Mike Lee", customerName, selectedListing.title, selectedListing.location);
                         // Create call record in Convex
                         const callId = await convex.mutation(api.calls.create, {
                             listingId: selectedListing._id,
@@ -542,7 +618,7 @@ Be precise and only return information you can clearly read.`
                 // For now, just call as a hack
                 if (callService && selectedListing.contactPhone) {
                     try {
-                        const script = callService.generatePropertyInquiryScript("Mike Lee", customerName, customerOrigin, selectedListing.title, selectedListing.location, moveInDate);
+                        const script = callService.generatePropertyInquiryScript("Mike Lee", customerName, selectedListing.title, selectedListing.location);
                         // Create call record in Convex
                         const callId = await convex.mutation(api.calls.create, {
                             listingId: selectedListing._id,
@@ -575,7 +651,7 @@ Be precise and only return information you can clearly read.`
                 // Unknown contact method, try phone if available
                 if (callService && selectedListing.contactPhone) {
                     try {
-                        const script = callService.generatePropertyInquiryScript("Mike Lee", customerName, customerOrigin, selectedListing.title, selectedListing.location, moveInDate);
+                        const script = callService.generatePropertyInquiryScript("Mike Lee", customerName, selectedListing.title, selectedListing.location);
                         const callId = await convex.mutation(api.calls.create, {
                             listingId: selectedListing._id,
                             conversationId: conversation._id,
@@ -706,10 +782,73 @@ Return ONLY valid JSON. If any required field (fullName, passportNumber, dateOfB
                         `Date of Birth: ${passportData.dateOfBirth}\n` +
                         `${passportData.nationality ? `Nationality: ${passportData.nationality}\n` : ""}\n` +
                         `Preparing your rental contract now...`);
-                    // Trigger contract creation by calling the contracting handler directly
-                    // The handleContractingState function will now see the passportData and proceed
                     console.log("✅ Passport data saved, moving to contract creation...");
-                    return; // Let the stuck conversation handler pick this up
+                    // Now create the contract immediately
+                    if (docusignService) {
+                        try {
+                            // Get selected listing
+                            const selectedListing = await convex.query(api.listings.getSelected, {
+                                conversationId: conversationId,
+                            });
+                            if (!selectedListing) {
+                                await ctx.reply("❌ Error: No property selected. Please contact support.");
+                                return;
+                            }
+                            // Create contract details
+                            const tenantName = passportData.fullName;
+                            const tenantEmail = user.username ? `${user.username}@telegram.user` : "tenant@example.com";
+                            const contractDetails = {
+                                propertyAddress: selectedListing.title,
+                                monthlyRent: selectedListing.price,
+                                currency: selectedListing.currency,
+                                startDate: "January 1, 2025",
+                                endDate: "December 31, 2025",
+                                depositAmount: selectedListing.price,
+                                tenantName,
+                                tenantEmail,
+                                landlordName: "Property Management Co.",
+                                landlordEmail: "landlord@property-management.com",
+                            };
+                            console.log("📝 Creating DocuSign contract...");
+                            // Create DocuSign contract
+                            const envelope = await docusignService.createContractAndGetSigningUrl(contractDetails, user.id.toString());
+                            // Store contract in database
+                            const contractId = await convex.mutation(api.contracts.create, {
+                                conversationId: conversationId,
+                                listingId: selectedListing._id,
+                                docusignEnvelopeId: envelope.envelopeId,
+                                documentUrl: envelope.signingUrl,
+                            });
+                            await convex.mutation(api.contracts.updateStatus, {
+                                contractId,
+                                status: "sent",
+                            });
+                            // Send signing URL to user
+                            const message = `📄 Your rental contract is ready!\n\n` +
+                                `Property: ${selectedListing.title}\n` +
+                                `Monthly Rent: ${selectedListing.currency} ${selectedListing.price}\n` +
+                                `Lease: January 1, 2025 - December 31, 2025\n\n` +
+                                `Please review and sign the contract here:\n${envelope.signingUrl}\n\n` +
+                                `Once you've signed the contract, click the button below.`;
+                            const keyboard = new InlineKeyboard().text("✅ I've signed the contract", "confirm_contract");
+                            await ctx.reply(message, {
+                                reply_markup: keyboard,
+                            });
+                            console.log("✅ DocuSign contract created and sent to user");
+                            return;
+                        }
+                        catch (docusignError) {
+                            console.error("❌ Error creating DocuSign contract:", docusignError);
+                            await ctx.reply(`❌ I had trouble creating the contract. Please try again later or contact support.\n\n` +
+                                `Error: ${docusignError.message}`);
+                            return;
+                        }
+                    }
+                    else {
+                        console.log("⚠️ DocuSign service not available");
+                        await ctx.reply("❌ Contract signing service is not available. Please contact support.");
+                        return;
+                    }
                 }
                 catch (aiError) {
                     console.error("❌ Error extracting passport data with AI:", aiError);

@@ -28,17 +28,17 @@ async function testSimpleCall() {
     console.log("   Call SID:", result.callSid);
     console.log("   Status:", result.status);
     console.log("\n⏳ Please answer your phone to confirm you can hear the voice!");
-    
+
     // Wait longer before checking
     console.log("\n⏳ Waiting 20 seconds...");
     await new Promise((resolve) => setTimeout(resolve, 20000));
-    
+
     const status = await callService.getCallStatus(result.callSid);
     console.log("\n📊 Final status:", status.status);
     if (status.duration) {
       console.log("   Duration:", status.duration, "seconds");
     }
-    
+
   } catch (error: any) {
     console.error("\n❌ Error:", error.message);
     process.exit(1);

@@ -182,7 +182,7 @@ export async function searchListings(
       .slice(0, 5);
 
     // Add mock lister contact info to all listings and re-classify
-    const mockPhone = "+66630108133"; // Thailand: 0 6301 08133
+    const mockPhone = "+66838315388"; // Thailand: 0 8383 15388
     return filteredListings.map((listing) => {
       const updated = {
         ...listing,

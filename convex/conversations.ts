@@ -57,6 +57,14 @@ export const updateRequirements = mutation({
       maxBudget: v.optional(v.number()),
       moveInDate: v.optional(v.string()),
       extras: v.optional(v.string()),
+      passportData: v.optional(v.object({
+        fullName: v.string(),
+        passportNumber: v.string(),
+        dateOfBirth: v.optional(v.string()),
+        nationality: v.optional(v.string()),
+        expiryDate: v.optional(v.string()),
+        gender: v.optional(v.string()),
+      })),
     }),
   },
   handler: async (ctx, args) => {

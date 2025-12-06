@@ -5,7 +5,7 @@ config();
 
 async function checkCallStatus() {
   const callSid = process.argv[2];
-  
+
   if (!callSid) {
     console.error("❌ Usage: npx tsx check-call-status.ts <call-sid>");
     process.exit(1);
@@ -18,7 +18,7 @@ async function checkCallStatus() {
 
   try {
     const call = await client.calls(callSid).fetch();
-    
+
     console.log("\n📊 Call Details:");
     console.log("   Call SID:", call.sid);
     console.log("   Status:", call.status);
@@ -29,13 +29,13 @@ async function checkCallStatus() {
     console.log("   End Time:", call.endTime);
     console.log("   Duration:", call.duration, "seconds");
     console.log("   Price:", call.price, call.priceUnit);
-    
+
     if (call.status === "failed" || call.status === "busy" || call.status === "no-answer") {
       console.log("\n❌ Call failed!");
       console.log("   Error Code:", call.errorCode);
       console.log("   Error Message:", call.errorMessage);
     }
-    
+
   } catch (error: any) {
     console.error("❌ Error fetching call:", error.message);
     process.exit(1);

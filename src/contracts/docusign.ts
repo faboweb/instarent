@@ -7,7 +7,8 @@ export interface DocuSignConfig {
   userId: string;
   accountId: string;
   basePath: string;
-  privateKeyPath: string;
+  privateKey?: string; // Private key content as string
+  privateKeyPath?: string; // Or path to private key file
   returnUrl?: string;
 }
 
@@ -49,8 +50,17 @@ export class DocuSignService {
 
     console.log("🔐 Requesting DocuSign access token via JWT...");
 
-    // Read private key from file
-    const privateKeyBuffer = fs.readFileSync(this.config.privateKeyPath);
+    // Get private key - either from string or file
+    let privateKeyBuffer: Buffer;
+    if (this.config.privateKey) {
+      // Use privateKey string directly
+      privateKeyBuffer = Buffer.from(this.config.privateKey, "utf-8");
+    } else if (this.config.privateKeyPath) {
+      // Read from file
+      privateKeyBuffer = fs.readFileSync(this.config.privateKeyPath);
+    } else {
+      throw new Error("Either privateKey or privateKeyPath must be provided");
+    }
 
     // Request JWT token
     const results = await this.apiClient.requestJWTUserToken(

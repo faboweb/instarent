@@ -20,7 +20,7 @@ export class OutboundCallService {
         this.voiceService = voiceService;
         this.baseUrl = baseUrl;
     }
-    async makeCall(toNumber, initialMessage, webhookUrl) {
+    async makeCall(toNumber, message, webhookUrl) {
         if (!this.phoneNumber) {
             throw new Error("Twilio phoneNumber is not configured. Please set TWILIO_PHONE_NUMBER environment variable.");
         }
@@ -29,27 +29,9 @@ export class OutboundCallService {
         }
         console.log(`📞 Initiating call from ${this.phoneNumber} to ${toNumber}`);
         try {
-            // Natural conversation flow with pauses
-            // Structure: Intro + availability question -> pause -> viewing question -> pause -> closing
-            const viewingQuestion = this.generateViewingQuestionScript();
-            const closing = this.generateClosingScript();
-            const twiml = `
-        <Response>
-          <Say voice="Polly.Nicha" language="th-TH">
-            ${escapeXml(initialMessage)}
-          </Say>
-          <Pause length="3"/>
-          <Say voice="Polly.Nicha" language="th-TH">
-            ${escapeXml(viewingQuestion)}
-          </Say>
-          <Pause length="3"/>
-          <Say voice="Polly.Nicha" language="th-TH">
-            ${escapeXml(closing)}
-          </Say>
-          <Pause length="1"/>
-          <Record maxLength="90" transcribe="true" finishOnKey="#" />
-        </Response>
-      `;
+            // For demo: Use TwiML to speak the message
+            // In production, you'd use ElevenLabs Conversational AI with Twilio Media Streams
+            const twiml = `<Response><Say voice="Polly.Joanna" language="en-US">${escapeXml(message)}</Say><Pause length="1"/><Say voice="Polly.Joanna" language="en-US">Is this property still available?</Say><Pause length="3"/><Say voice="Polly.Joanna" language="en-US">And when would be a good time for us to schedule a viewing?</Say><Pause length="2"/><Say voice="Polly.Joanna" language="en-US">Thank you! We'll chat back with our client and get back to you.</Say></Response>`;
             const callParams = {
                 twiml,
                 to: toNumber,
@@ -139,17 +121,12 @@ export class OutboundCallService {
             return null;
         }
     }
-    generatePropertyInquiryScript(agentName, clientName, clientOrigin, propertyTitle, propertyLocation, moveInDate) {
-        const originInfo = clientOrigin ? ` who is from ${clientOrigin}` : "";
-        const moveInInfo = moveInDate ? ` They want to move in ${moveInDate}.` : "";
-        return (`Hi, this is ${agentName}. My client${originInfo} is interested in your property: ${propertyTitle} in ${propertyLocation}.${moveInInfo} ` +
-            `Is this still available?`);
-    }
-    generateViewingQuestionScript() {
-        return `When would you be able to do a viewing?`;
-    }
-    generateClosingScript() {
-        return `Great, I'll check with my client and get back to you. Talk to you soon!`;
+    generatePropertyInquiryScript(agentName, clientName, propertyTitle, propertyLocation) {
+        return (`Hello, this is ${agentName} calling on behalf of ${clientName}. ` +
+            `I'm reaching out regarding your property listing: ${propertyTitle} in ${propertyLocation}. ` +
+            `My client is very interested in this property and would like to schedule a viewing. ` +
+            `Could you please let us know your available times for a showing? ` +
+            `You can reach us back at this number or leave a message.`);
     }
 }
 function escapeXml(text) {

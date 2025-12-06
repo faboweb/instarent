@@ -253,7 +253,7 @@ async function main() {
     process.env.DOCUSIGN_USER_ID &&
     process.env.DOCUSIGN_ACCOUNT_ID &&
     process.env.DOCUSIGN_BASE_PATH &&
-    process.env.DOCUSIGN_PRIVATE_KEY_PATH
+    (process.env.DOCUSIGN_PRIVATE_KEY || process.env.DOCUSIGN_PRIVATE_KEY_PATH)
   ) {
     try {
       docusignService = createDocuSignService({
@@ -261,7 +261,8 @@ async function main() {
         userId: process.env.DOCUSIGN_USER_ID,
         accountId: process.env.DOCUSIGN_ACCOUNT_ID,
         basePath: process.env.DOCUSIGN_BASE_PATH,
-        privateKeyPath: process.env.DOCUSIGN_PRIVATE_KEY_PATH,
+        privateKey: process.env.DOCUSIGN_PRIVATE_KEY, // Direct key content
+        privateKeyPath: process.env.DOCUSIGN_PRIVATE_KEY_PATH, // Or file path
         returnUrl: process.env.DOCUSIGN_RETURN_URL,
       });
       console.log("✅ DocuSign contract signing enabled");
@@ -288,7 +289,8 @@ async function main() {
     callService,
     websiteScraper,
     browserbaseClient,
-    docusignService
+    docusignService,
+    paymentService
   );
 
   console.log("🚀 InstaRent bot starting...");
@@ -580,10 +582,8 @@ async function handleContactingState(
         const script = callService.generatePropertyInquiryScript(
           "Mike Lee",
           customerName,
-          customerOrigin,
           selectedListing.title,
-          selectedListing.location,
-          moveInDate
+          selectedListing.location
         );
 
         const callResult = await callService.makeCall(
@@ -956,10 +956,8 @@ async function handleContactingState(
             const script = callService.generatePropertyInquiryScript(
               "Mike Lee",
               customerName,
-              customerOrigin,
               selectedListing.title,
-              selectedListing.location,
-              moveInDate
+              selectedListing.location
             );
 
             const callId = await convex.mutation(api.calls.create, {
@@ -1148,10 +1146,8 @@ async function handleContactingState(
             const script = callService.generatePropertyInquiryScript(
               "Mike Lee",
               customerName,
-              customerOrigin,
               selectedListing.title,
-              selectedListing.location,
-              moveInDate
+              selectedListing.location
             );
 
             const callId = await convex.mutation(api.calls.create, {
@@ -1831,8 +1827,8 @@ async function handlePaymentState(
             paymentUrl: invoice.hostedInvoiceUrl,
           });
 
-          // Send invoice to customer
-          await paymentService.sendInvoice(invoice.invoiceId);
+          // Don't send invoice via email - just give user the link directly
+          console.log(`  ✅ Payment invoice created: ${invoice.invoiceId}`);
 
           // Notify user
           const totalAmount = (monthlyRent + deposit).toFixed(2);

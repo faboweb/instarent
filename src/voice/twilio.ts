@@ -43,7 +43,7 @@ export class OutboundCallService {
 
   async makeCall(
     toNumber: string,
-    initialMessage: string,
+    message: string,
     webhookUrl?: string
   ): Promise<CallResult> {
     if (!this.phoneNumber) {
@@ -56,12 +56,9 @@ export class OutboundCallService {
     console.log(`📞 Initiating call from ${this.phoneNumber} to ${toNumber}`);
 
     try {
-      // Natural conversation flow with pauses
-      // Structure: Intro + availability question -> pause -> viewing question -> pause -> closing
-      const viewingQuestion = this.generateViewingQuestionScript();
-      const closing = this.generateClosingScript();
-
-      const twiml = `<Response><Say voice="Polly.Joanna" language="en-US">${escapeXml(initialMessage)}</Say><Pause length="3"/><Say voice="Polly.Joanna" language="en-US">${escapeXml(viewingQuestion)}</Say><Pause length="3"/><Say voice="Polly.Joanna" language="en-US">${escapeXml(closing)}</Say><Pause length="1"/><Record maxLength="90" transcribe="true" finishOnKey="#"/></Response>`;
+      // For demo: Use TwiML to speak the message
+      // In production, you'd use ElevenLabs Conversational AI with Twilio Media Streams
+      const twiml = `<Response><Say voice="Polly.Joanna" language="en-US">${escapeXml(message)}</Say><Pause length="1"/><Say voice="Polly.Joanna" language="en-US">Is this property still available?</Say><Pause length="3"/><Say voice="Polly.Joanna" language="en-US">And when would be a good time for us to schedule a viewing?</Say><Pause length="2"/><Say voice="Polly.Joanna" language="en-US">Thank you! We'll chat back with our client and get back to you.</Say></Response>`;
 
       const callParams: any = {
         twiml,
@@ -171,25 +168,16 @@ export class OutboundCallService {
   generatePropertyInquiryScript(
     agentName: string,
     clientName: string,
-    clientOrigin: string | undefined,
     propertyTitle: string,
-    propertyLocation: string,
-    moveInDate?: string
+    propertyLocation: string
   ): string {
-    const originInfo = clientOrigin ? ` who is from ${clientOrigin}` : "";
-    const moveInInfo = moveInDate ? ` They want to move in ${moveInDate}.` : "";
     return (
-      `Hi, this is ${agentName}. My client${originInfo} is interested in your property: ${propertyTitle} in ${propertyLocation}.${moveInInfo} ` +
-      `Is this still available?`
+      `Hello, this is ${agentName} calling on behalf of ${clientName}. ` +
+      `I'm reaching out regarding your property listing: ${propertyTitle} in ${propertyLocation}. ` +
+      `My client is very interested in this property and would like to schedule a viewing. ` +
+      `Could you please let us know your available times for a showing? ` +
+      `You can reach us back at this number or leave a message.`
     );
-  }
-
-  generateViewingQuestionScript(): string {
-    return `When would you be able to do a viewing?`;
-  }
-
-  generateClosingScript(): string {
-    return `Great, I'll check with my client and get back to you. Talk to you soon!`;
   }
 }
 

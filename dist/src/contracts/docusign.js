@@ -13,8 +13,19 @@ export class DocuSignService {
             return this.accessToken;
         }
         console.log("🔐 Requesting DocuSign access token via JWT...");
-        // Read private key from file
-        const privateKeyBuffer = fs.readFileSync(this.config.privateKeyPath);
+        // Get private key - either from string or file
+        let privateKeyBuffer;
+        if (this.config.privateKey) {
+            // Use privateKey string directly
+            privateKeyBuffer = Buffer.from(this.config.privateKey, "utf-8");
+        }
+        else if (this.config.privateKeyPath) {
+            // Read from file
+            privateKeyBuffer = fs.readFileSync(this.config.privateKeyPath);
+        }
+        else {
+            throw new Error("Either privateKey or privateKeyPath must be provided");
+        }
         // Request JWT token
         const results = await this.apiClient.requestJWTUserToken(this.config.integrationKey, this.config.userId, ["signature", "impersonation"], privateKeyBuffer, 3600 // Token expires in 1 hour
         );

@@ -39,6 +39,14 @@ export declare const updateRequirements: import("convex/server").RegisteredMutat
         maxBudget?: number | undefined;
         moveInDate?: string | undefined;
         extras?: string | undefined;
+        passportData?: {
+            dateOfBirth?: string | undefined;
+            nationality?: string | undefined;
+            expiryDate?: string | undefined;
+            gender?: string | undefined;
+            fullName: string;
+            passportNumber: string;
+        } | undefined;
     };
     conversationId: import("convex/values").GenericId<"conversations">;
 }, Promise<void>>;
