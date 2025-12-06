@@ -8,4 +8,7 @@ node_modules
 .env.test
 .env.production
 
-docusign*
+docusign_public_key.pem
+docusign_private_key.pem
+
+dist
